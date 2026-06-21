@@ -1,0 +1,10 @@
+# sentence-transformers pulls in `transformers`, whose lazy vision image-processors
+# try to `import torchvision` (which we don't install — this app only needs text
+# embeddings). Streamlit's dev file-watcher walks every imported module and trips
+# over those imports, logging harmless ModuleNotFoundError tracebacks on each rerun.
+# We don't rely on hot-reload here, so disabling the source watcher keeps logs clean.
+[server]
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
