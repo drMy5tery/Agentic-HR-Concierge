@@ -162,3 +162,25 @@ def test_cancel_does_not_execute(app):
     _click(app, "Cancel")
     assert app.session_state.pending is None
     assert app.session_state.keka.balances["sick"] == 10  # unchanged
+
+
+def test_conversation_memory_threads_prior_turns(monkeypatch):
+    # A follow-up turn must carry the previous turn's question and answer as context.
+    seen = []
+
+    def recorder(messages, **kwargs):
+        seen.append(messages)
+        return json.dumps({"action": "respond",
+                           "args": {"text": "Noted.", "citation_ids": []}})
+
+    monkeypatch.setattr("agent.llm.call_llm", recorder)
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.run()
+    at.chat_input[0].set_value("How many casual leave days do I get?").run()
+    at.chat_input[0].set_value("what about earned leave?").run()
+    assert not at.exception
+
+    joined = " ".join(m["content"] for m in seen[-1])  # 2nd turn's messages
+    assert "How many casual leave days" in joined   # prior question threaded as context
+    assert "what about earned leave" in joined       # current question

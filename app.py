@@ -47,9 +47,50 @@ def _init_state() -> None:
     ss.setdefault("chat", [])          # display messages
     ss.setdefault("pending", None)     # AgentResult awaiting confirmation
     ss.setdefault("work_conv", [])     # in-flight agent conversation (scratch)
-    ss.setdefault("work_seen", {})     # retrieved chunks for the current turn
+    ss.setdefault("seen_chunks", {})   # chunks retrieved this session (for citations)
     ss.setdefault("provider", config.LLM_PROVIDER)
     ss.setdefault("prev_balances", None)
+
+
+# How many recent USER questions to thread in as context for follow-ups.
+_MAX_HISTORY_QUESTIONS = 3
+
+# Referential cues that mark a message as a follow-up needing prior context.
+_FOLLOWUP_CUES = (
+    "that ", "those", "this ", " it", "them", "same", "earlier", "previous",
+    "what about", "how about", "and what", "before that", "after that", "the other",
+)
+
+
+def _is_followup(text: str) -> bool:
+    """True if the message likely refers back to an earlier turn.
+
+    Threading prior context degrades this free model's tool-calling on
+    self-contained questions, so we only do it when the message actually needs
+    it — a referential cue, or a very short utterance.
+    """
+    t = " " + text.lower().strip() + " "
+    if len(t.split()) <= 3:
+        return True
+    return any(cue in t for cue in _FOLLOWUP_CUES)
+
+
+def _recent_history() -> list[dict]:
+    """Thread recent USER questions (not prior answers) as lightweight context.
+
+    Just the questions — deliberately NOT the prior grounded answers: feeding the
+    model its own prose replies biases it towards answering directly instead of
+    calling tools (search_policy / get_payslip). The questions alone give enough
+    continuity to resolve follow-ups like "what about earned leave?" or "that month".
+    """
+    prior = [m["text"] for m in st.session_state.chat
+             if m["role"] == "user" and m.get("text")][-_MAX_HISTORY_QUESTIONS:]
+    if not prior:
+        return []
+    joined = " | ".join(prior)
+    return [{"role": "user",
+             "content": f"(Context only — earlier questions in this chat: {joined}. "
+                        f"Now answer my new question below, choosing the right tool for it.)"}]
 
 
 def _llm_fn():
@@ -80,13 +121,15 @@ def _append_assistant(result) -> None:
 
 # --- event handlers (mutate, then caller reruns) ----------------------------
 def _handle_user_message(text: str) -> None:
+    # Only thread prior context for genuine follow-ups; keep self-contained
+    # questions clean so the model reliably calls the right tool.
+    conv = _recent_history() if _is_followup(text) else []
     st.session_state.chat.append({"role": "user", "text": text})
     registry, system_prompt = _session_objects()
-    conv, seen = [], {}
+    seen = st.session_state.seen_chunks  # persists across turns so citations resolve
     result = start_turn(st.session_state.keka, conv, seen, registry, system_prompt,
                         text, llm=_llm_fn())
     st.session_state.work_conv = conv
-    st.session_state.work_seen = seen
     if result.kind == "pending":
         st.session_state.pending = result
     else:
@@ -98,7 +141,7 @@ def _handle_confirm() -> None:
     pending = st.session_state.pending
     registry, system_prompt = _session_objects()
     result = confirm_write(st.session_state.keka, st.session_state.work_conv,
-                           st.session_state.work_seen, registry, system_prompt,
+                           st.session_state.seen_chunks, registry, system_prompt,
                            pending, llm=_llm_fn())
     # Clear the pending action BEFORE the rerun to avoid a double-submit.
     st.session_state.pending = result if result.kind == "pending" else None
@@ -110,7 +153,7 @@ def _handle_cancel() -> None:
     pending = st.session_state.pending
     registry, system_prompt = _session_objects()
     result = cancel_write(st.session_state.keka, st.session_state.work_conv,
-                          st.session_state.work_seen, registry, system_prompt,
+                          st.session_state.seen_chunks, registry, system_prompt,
                           pending, llm=_llm_fn())
     st.session_state.pending = result if result.kind == "pending" else None
     if result.kind == "final":
@@ -172,6 +215,8 @@ def _render_sidebar() -> None:
             st.session_state.chat = []
             st.session_state.pending = None
             st.session_state.prev_balances = None
+            st.session_state.seen_chunks = {}
+            st.session_state.work_conv = []
             st.rerun()
 
 
