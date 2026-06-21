@@ -21,7 +21,8 @@ retrieval and the agent loop (no LangChain / LlamaIndex).
 
 1. [What it does](#what-it-does)
 2. [Demo moments](#demo-moments-exact-prompts)
-3. [Architecture](#architecture)
+3. [Screenshots](#screenshots)
+4. [Architecture](#architecture)
 4. [The agent loop](#the-agent-loop)
 5. [The human-in-the-loop write-gate](#the-human-in-the-loop-write-gate)
 6. [Grounded retrieval (RAG)](#grounded-retrieval-rag)
@@ -66,6 +67,34 @@ retrieval and the agent loop (no LangChain / LlamaIndex).
 | 4 | Read action | `Show my latest payslip` | Fetches the latest payslip from the mock and summarises it. |
 
 Follow-ups work too, e.g. after #4 ask `do you have payslips for before that month?`
+
+---
+
+## Screenshots
+
+Live run against Groq (`openai/gpt-oss-120b`). Note the **live "Keka" state panel**
+on the left and the **confirm step** before any write.
+
+**1 — Chat, live state panel, and the human-in-the-loop confirm card.** The agent
+has proposed applying 2 days' casual leave (it resolved "tomorrow" to `2026-06-22`)
+and is waiting for **Confirm / Cancel** — the write has **not** executed yet, so the
+casual balance is still **8**.
+
+![Confirm card before a write executes](screenshots/01-confirm-gate.png)
+
+**2 — Write executed, then a sensitive message escalates.** After confirming, the
+leave is applied — casual balance drops **8 → 6** and `LEAVE-0003` appears in
+*Recent leave records*. A "a colleague is harassing me" message is **not** answered;
+the agent proposes a **confidential** ticket routed to **People Ops**, again behind a
+confirm step.
+
+![Leave applied and a sensitive escalation proposed](screenshots/02-leave-applied-escalation.png)
+
+**3 — Confidential ticket raised, and a payslip fetched.** `TICKET-0002 → People Ops
+(Confidential)` now shows in the *Tickets* panel, and a follow-up payslip request is
+fulfilled with a full breakdown — all in one continuing conversation.
+
+![Confidential ticket in the panel and a payslip with breakdown](screenshots/03-ticket-and-payslip.png)
 
 ---
 
