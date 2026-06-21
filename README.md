@@ -87,8 +87,8 @@ flowchart TB
     Tools -->|read: search_policy| RAG[rag/search.py<br/>cosine top-k]
     RAG --> Index[(all-MiniLM-L6-v2<br/>embeddings in NumPy)]
     Index --- Docs[policy markdown<br/>data/policies]
-    Tools -->|read + write tools| Keka[mock/keka.py<br/>in-memory Keka backend]
-    UI -. reads live state .-> Keka
+    Tools -->|read + write| Keka[mock/keka.py<br/>in-memory Keka backend]
+    UI -. live state .-> Keka
 ```
 
 **Key idea: a model-agnostic JSON router, not native function calling.** Both
@@ -115,7 +115,7 @@ flowchart TD
     B -->|yes| P[Propose confidential raise_ticket]
     B -->|no| C[Ask LLM for ONE JSON action]
     C --> D{Valid JSON?}
-    D -->|no → retry once| C
+    D -->|retry once| C
     D -->|still invalid| ESC[Fail-safe: raise policy ticket]
     D -->|yes| E{Action}
     E -->|read tool| H[Execute · append result]
@@ -158,18 +158,20 @@ submission, or a Confirm/Cancel click), each of which ends with `st.rerun()`; th
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Thinking: user message
-    Thinking --> Idle: respond — read-only answer
-    Thinking --> Pending: WRITE proposed — gated, not executed
-    Pending --> Executing: Confirm
-    Pending --> Idle: Cancel — action not performed
-    Executing --> Idle: tool runs then final reply
+    Idle --> Thinking: ask
+    Thinking --> Idle: answer
+    Thinking --> Pending: write proposed
+    Pending --> Executing: confirm
+    Pending --> Idle: cancel
+    Executing --> Idle: done
     note right of Pending
-      pending_action stored in session_state
-      chat input disabled
-      cleared BEFORE rerun to avoid double-submit
+      Gated write held in session_state.
+      Input disabled; cleared before rerun.
     end note
 ```
+
+*Read-only answers return straight to Idle; a proposed write parks in Pending
+(gated, not executed) until the employee confirms or cancels.*
 
 On **Confirm**: the tool executes, the result is appended, `pending_action` is
 cleared *before* the rerun, and the loop resumes to produce the final message
