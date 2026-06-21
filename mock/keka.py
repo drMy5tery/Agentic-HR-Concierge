@@ -296,10 +296,10 @@ def new_state() -> KekaState:
     """
     employee = {
         "employee_id": "EMP-1042",
-        "name": "Aarav Sharma",
+        "name": "Jawahar Jeeva",
         "designation": "Software Engineer II",
         "department": "Engineering",
-        "manager": "Priya Nair",
+        "manager": "Regina Joseph",
         "location": "Bengaluru",
         "date_of_joining": "2023-07-15",
     }

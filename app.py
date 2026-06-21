@@ -254,7 +254,7 @@ def main() -> None:
     _init_state()
     _render_sidebar()
 
-    st.title("🧑‍💼 HR Concierge")
+    st.title("HR Concierge")
     st.caption("Grounded HR Q&A with citations, and HR actions with a confirm step. "
                "Informational support only — not legal or HR advice. The downstream "
                "HR system is simulated.")
