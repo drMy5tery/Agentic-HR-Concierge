@@ -1,0 +1,15 @@
+# LLM backends — a model-agnostic JSON router sits on top of these.
+groq>=0.13            # primary backend (OpenAI-compatible chat completions)
+google-genai>=1.0     # backup backend (current Gemini SDK; import: `from google import genai`)
+
+# Local embeddings for RAG — no vector database.
+sentence-transformers>=3.0
+numpy>=1.26
+
+# UI
+streamlit>=1.49      # uses width="stretch" (replaces deprecated use_container_width)
+pandas>=2.0          # for the side-panel tables (also a Streamlit dependency)
+
+# Config + tests
+python-dotenv>=1.0
+pytest>=8.0
