@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 import config
-from agent.llm import call_llm
+from agent.llm import LLMError, call_llm
 from agent.tools import confirm_message, execute_tool
 
 LLMFn = Callable[[list[dict[str, str]]], str]
@@ -145,6 +145,23 @@ def _escalate(state, reason: str, *, category: str = "policy", summary: Optional
     )
 
 
+def _service_unavailable(exc: Exception) -> AgentResult:
+    """LLM backend error (e.g. a rate limit) — tell the user and ask them to retry.
+
+    Crucially this does NOT raise an HR ticket: a backend outage is an
+    infrastructure issue, not something to route to a person.
+    """
+    text = str(exc)
+    cause = "a rate limit" if ("429" in text or "RESOURCE_EXHAUSTED" in text) else "a temporary error"
+    return AgentResult(
+        kind="final",
+        text=("The assistant is temporarily unavailable — the language model "
+              f"returned {cause}. Please try again in a moment, or switch the LLM "
+              "provider in the sidebar. (No ticket was raised.)"),
+        escalated=False,
+    )
+
+
 # --- citation resolution ----------------------------------------------------
 def _resolve_citations(citation_ids: Any, seen_chunks: dict[str, dict]) -> list[dict[str, Any]]:
     """Resolve model-supplied ids against chunks actually returned by search.
@@ -177,12 +194,16 @@ def step(
     trace: Optional[TraceFn] = None,
 ) -> AgentResult:
     """Run reads until a write is proposed, a reply is produced, or we escalate."""
+    grounding_nudged = False
     for _ in range(max_iters):
         try:
             action, raw = _request_action(system_prompt, conversation, llm)
+        except LLMError as exc:
+            # Backend unavailable (rate limit / network / auth): retry message, no ticket.
+            return _service_unavailable(exc)
         except _ParseError:
             return _escalate(state, "I couldn't read that reliably.")
-        except Exception:  # noqa: BLE001 - any backend error degrades to escalation
+        except Exception:  # noqa: BLE001 - last-resort safety net for unexpected bugs
             return _escalate(state, "I hit an unexpected problem.")
 
         if trace:
@@ -191,10 +212,22 @@ def step(
         args = action.get("args") or {}
 
         if name == "respond":
+            claimed = args.get("citation_ids") or []
+            citations = _resolve_citations(claimed, seen_chunks)
+            # Grounding guard: the model cited ids that no search_policy result
+            # contains — i.e. it fabricated grounding (or answered from memory).
+            # Reject once and force a real search before it may answer.
+            if claimed and not citations and not grounding_nudged:
+                grounding_nudged = True
+                conversation.append({"role": "assistant", "content": raw})
+                conversation.append({"role": "user", "content": json.dumps({
+                    "error": "Those citation ids did not come from a search_policy "
+                             "result. Call search_policy first and cite only ids it "
+                             "returns; do not answer a policy question from memory."})})
+                continue
             conversation.append({"role": "assistant", "content": raw})
             text = str(args.get("text", "")).strip() or "I'm not sure how to help with that."
-            return AgentResult(kind="final", text=text,
-                               citations=_resolve_citations(args.get("citation_ids"), seen_chunks))
+            return AgentResult(kind="final", text=text, citations=citations)
 
         spec = registry.get(name)
         if spec is None:

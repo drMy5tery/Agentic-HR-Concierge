@@ -226,11 +226,30 @@ def test_iteration_cap_escalates():
     assert res.kind == "final" and res.escalated
 
 
-def test_backend_exception_escalates():
+def test_backend_unavailable_does_not_raise_ticket():
+    # A rate limit / backend outage must NOT mint an HR ticket — it asks to retry.
+    from agent.llm import LLMError
+
+    def rate_limited(messages):
+        raise LLMError("Gemini request failed: 429 RESOURCE_EXHAUSTED")
+
+    state, registry, sp = session()
+    n_tickets = len(state.tickets)
+    conv, seen = [], {}
+    res = start_turn(state, conv, seen, registry, sp, "what is earned leave?", llm=rate_limited)
+    assert res.kind == "final"
+    assert res.escalated is False
+    assert res.ticket is None
+    assert len(state.tickets) == n_tickets
+    assert "temporarily unavailable" in res.text.lower()
+
+
+def test_unexpected_exception_still_escalates():
+    # A genuinely unexpected (non-LLM) error keeps the fail-safe ticket.
     def boom(messages):
-        raise RuntimeError("network down")
+        raise RuntimeError("unexpected bug")
 
     state, registry, sp = session()
     conv, seen = [], {}
     res = start_turn(state, conv, seen, registry, sp, "anything", llm=boom)
-    assert res.kind == "final" and res.escalated
+    assert res.kind == "final" and res.escalated and res.ticket
