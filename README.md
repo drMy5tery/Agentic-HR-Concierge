@@ -15,10 +15,9 @@ It runs entirely on **free LLM tiers** (Groq or Google Gemini), uses **local
 embeddings** for retrieval (no vector database), and hand-rolls both the
 retrieval and the agent loop (no LangChain / LlamaIndex).
 
-> 📑 **Context & vision** — this demo is one piece of a broader research effort on
-> the **employment lifecycle**. The accompanying deck explains the use case and
-> where HR Concierge fits within that wider picture:
-> **[View the presentation ↗](https://docs.google.com/presentation/d/1I5HxppTpoRS5DthUufhS9UpzahC-4RPTYitqPGXGU_U/edit?usp=sharing)**
+> **Context** — this demo is part of broader research on the employment lifecycle.
+> The accompanying presentation explains the use case and where HR Concierge fits:
+> [View the presentation](https://docs.google.com/presentation/d/1I5HxppTpoRS5DthUufhS9UpzahC-4RPTYitqPGXGU_U/edit?usp=sharing).
 
 ---
 
